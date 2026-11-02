@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import os
@@ -27,7 +27,29 @@ def init_db():
     connection.commit()
     connection.close()
 
-app = Flask(__name__)
+FRONTEND_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend', 'dist')
+app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path='')
+
+@app.route('/')
+def frontend_index():
+    if os.path.isfile(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
+    return jsonify({
+        'error': 'The React frontend has not been built yet.',
+        'instructions': 'Run npm install && npm run build in the frontend directory.'
+    }), 503
+
+@app.route('/<path:path>')
+def frontend_assets(path):
+    # Serve built Vite assets, while leaving API, health, and unknown paths alone.
+    if path.startswith(('api/', 'health')):
+        return jsonify({'error': 'Not found'}), 404
+    requested_file = os.path.join(FRONTEND_DIST, path)
+    if os.path.isfile(requested_file):
+        return send_from_directory(FRONTEND_DIST, path)
+    if os.path.isfile(os.path.join(FRONTEND_DIST, 'index.html')):
+        return send_from_directory(FRONTEND_DIST, 'index.html')
+    return jsonify({'error': 'Not found'}), 404
 
 if os.environ.get('FLASK_ENV') == 'production':
     CORS(app, resources={r"/api/*": {"origins": "https://ldexpensetracker.netlify.app"}}, supports_credentials=True)
@@ -166,6 +188,34 @@ def api_reset():
     connection.commit()
     connection.close()
 
+    return jsonify({'success': True})
+
+def reset_budget():
+    client_id = get_client_id()
+    if not client_id:
+        return jsonify({'success': False, 'error': 'Missing X-Client-ID header'}), 400
+    connection = sqlite3.connect('expenses.db')
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM budget WHERE client_id = ?', (client_id,))
+    connection.commit()
+    connection.close()
+    return jsonify({'success': True})
+
+@app.route('/api/expenses/<int:expense_id>', methods=['DELETE'])
+def api_delete_expense(expense_id):
+    client_id = get_client_id()
+    if not client_id:
+        return jsonify({'success': False, 'error': 'Missing X-Client-ID header'}), 400
+
+    connection = sqlite3.connect('expenses.db')
+    cursor = connection.cursor()
+    cursor.execute('DELETE FROM expenses WHERE id = ? AND client_id = ?', (expense_id, client_id))
+    deleted = cursor.rowcount
+    connection.commit()
+    connection.close()
+
+    if not deleted:
+        return jsonify({'success': False, 'error': 'Expense not found'}), 404
     return jsonify({'success': True})
 
 
