@@ -52,7 +52,7 @@ def frontend_assets(path):
     return jsonify({'error': 'Not found'}), 404
 
 if os.environ.get('FLASK_ENV') == 'production':
-    CORS(app, resources={r"/api/*": {"origins": "https://ldexpensetracker.netlify.app"}}, supports_credentials=True)
+    CORS(app, resources={r"/api/*": {"origins": "https://exptrack747.netlify.app"}}, supports_credentials=True)
 else:
     CORS(app, supports_credentials=True, origins=['http://localhost:3000'])
 
